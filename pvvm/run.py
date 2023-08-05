@@ -101,22 +101,19 @@ class makeISO(object):
     """
     def __init__(self, iso, USA=None):
         ### Load USA if None
-        if USA is None:
-            self.USA = makeUSA()
-        else:
-            self.USA = USA
+        self.USA = makeUSA() if USA is None else USA
         ### Load all nodes
         self.iso = iso.upper()
         self.dfnodes = pvvm.io.get_iso_nodes(self.iso)
         self.nodes = self.dfnodes.node.values
         self.isonodes = (self.iso+':'+self.dfnodes.node.astype(str)).values
-        
+
         ### Create dictionary of node-to-NSRDBlatlonindex
         if 'latlonindex' in self.dfnodes.columns:
             self.node2latlonindex = dict(self.dfnodes[['node','latlonindex']].values)
         else:
             self.node2latlonindex = dict(self.dfnodes[['node','node']].values)
-        
+
         ### Create dictionary of node-to-latlon
         self.node2latlon = dict(zip(
             self.dfnodes.node.values, self.dfnodes[['latitude','longitude']].values.tolist()
@@ -126,7 +123,7 @@ class makeISO(object):
         return self.iso
     
     def __repr__(self):
-        return 'makeISO({})'.format(self.iso)
+        return f'makeISO({self.iso})'
     
     def get_fulltimenodes(self, year, market='da', geo=True, output='node'):
         if geo is True:
@@ -150,8 +147,8 @@ class makeISO(object):
         units='MW', division='region', filepathin=None,):
         """
         """
-        unitconverter = {'W': 1E-6,'kW':1E-3,'MW':1,'GW':1000,'TW':1000000}
         if source in ['ferc', 'FERC', None]:
+            unitconverter = {'W': 1E-6,'kW':1E-3,'MW':1,'GW':1000,'TW':1000000}
             dfload = pvvm.io.getload_ferc(
                 iso=self.iso, year=year, dfferc=self.USA.dfferc, 
                 error=error) / unitconverter[units]
@@ -170,18 +167,19 @@ class makeISO(object):
     def get_netload(self, year, net='vre', resolution=60, units='MW'):
         """
         """
-        df = pvvm.io.get_netload(
-            iso=self.iso, year=year, net=net, resolution=resolution, units=units)
-        return df
+        return pvvm.io.get_netload(
+            iso=self.iso, year=year, net=net, resolution=resolution, units=units
+        )
     
     def get_capacitynodes(self, year):
         """
         Return nodes that have a capacity price in year
         """
-        nodelist = [node for node in self.nodes 
-                    if ('{}:{}'.format(self.iso, node), year, 1) 
-                    in self.USA.dictcapacityprice.keys()]
-        return nodelist
+        return [
+            node
+            for node in self.nodes
+            if (f'{self.iso}:{node}', year, 1) in self.USA.dictcapacityprice.keys()
+        ]
         
     def get_critical_hours(
         self, year, percent='iso', numhours=None, net=None, resolution=60,
@@ -208,9 +206,6 @@ class makeISO(object):
                 dfload = self.get_netload(
                     year=year, net=net, resolution=resolution,
                 )
-            else:
-                pass
-            
             if numhours is not None:
                 mask = pvvm.model.getcriticalhours(
                     dsload=dfload, percent=None, year=year, numhours=numhours,
@@ -219,44 +214,36 @@ class makeISO(object):
                 mask = pvvm.model.getcriticalhours(
                     dsload=dfload, percent=percent, year=year, numhours=None,
                     dropleap=dropleap, resolution=resolution,)
-        
+
         return mask
 
 class makeNode(object):
     """
     """
     def __init__(self, isonode=None, ISO=None, node=None):
-        if isonode is not None:
-            self.isonode = isonode
-        else:
-            self.isonode = '{}:{}'.format(ISO.iso, node)
-            
+        self.isonode = isonode if isonode is not None else f'{ISO.iso}:{node}'
         if ISO is not None:
             self.ISO = ISO
             self.iso = self.ISO.iso.upper()
         else:
             self.iso = self.isonode.split(':')[0].upper()
             self.ISO = makeISO(self.iso)
-        
-        if node is not None:
-            self.node = node
-        else:
-            self.node = isonode.split(':')[1]
-            
+
+        self.node = node if node is not None else isonode.split(':')[1]
         ### Get timezone
         self.tz = pvvm.toolbox.tz_iso[self.iso]
         self.timezone = pvvm.toolbox.timezone_iso[self.iso]
-        
+
         ### Get NSRDB latlonindex
         try:
             self.latlonindex = self.ISO.node2latlonindex[self.node]
         except KeyError:
             self.latlonindex = self.ISO.node2latlonindex[int(self.node)]
-        
+
         ### Get eGRID region
         self.egridregion = self.ISO.USA.isonode2egrid[self.isonode]
         self.egrid = self.ISO.USA.isonode2egrid[self.isonode]
-        
+
         ### Get location
         try:
             self.latitude, self.longitude = self.ISO.node2latlon[self.node]
@@ -269,38 +256,36 @@ class makeNode(object):
         return self.isonode
     
     def __repr__(self):
-        return 'makeNode({})'.format(self.isonode)
+        return f'makeNode({self.isonode})'
     
     def get_price(self, year, product='lmp', market='da'):
         """
         """
-        filepath = revmpath+'{}/io/{}-nodal/{}/'.format(
-            self.iso, product, market)
-        dflmp = pvvm.io.getLMPfile(
-            filepath, '{}-{}.gz'.format(self.node, year), 
-            self.tz, squeeze=True, product=product)
-        return dflmp
+        filepath = revmpath + f'{self.iso}/io/{product}-nodal/{market}/'
+        return pvvm.io.getLMPfile(
+            filepath,
+            f'{self.node}-{year}.gz',
+            self.tz,
+            squeeze=True,
+            product=product,
+        )
     
     def get_nsrdb_filepath(self, year):
         resolution = 60 if year == 'tmy' else 30
-        filepath = revmpath+'{}/in/NSRDB/{}/{}min/'.format(
-            self.iso, year, resolution)
-        filename='{}-{}.gz'.format(self.latlonindex, year)
+        filepath = (revmpath + f'{self.iso}/in/NSRDB/{year}/{resolution}min/')
+        filename = f'{self.latlonindex}-{year}.gz'
         return filepath+filename
     
     def get_nsrdb_file(self, year, returnall=True):
         resolution = 60 if year == 'tmy' else 30
         dfsun, info, tz, elevation = pvvm.io.getNSRDBfile(
-            filepath=revmpath+'{}/in/NSRDB/{}/{}min/'.format(
-                self.iso, year, resolution,
-            ),
-            filename='{}-{}.gz'.format(self.latlonindex, year),
-            year=year, resolution=resolution, forcemidnight=False
+            filepath=(revmpath + f'{self.iso}/in/NSRDB/{year}/{resolution}min/'),
+            filename=f'{self.latlonindex}-{year}.gz',
+            year=year,
+            resolution=resolution,
+            forcemidnight=False,
         )
-        if returnall is True:
-            return dfsun, info, tz, elevation
-        else:
-            return dfsun
+        return (dfsun, info, tz, elevation) if returnall is True else dfsun
         
     def get_emissions(
         self, year, pollutant='co2', emissions='marginal',
@@ -341,12 +326,16 @@ class makeNode(object):
                 assert (('percent' in kwargs) or ('numhours' in kwargs))
             mask = self.ISO.get_critical_hours(
                 year=year, **kwargs)
-    
-        dfcapacityprice = pvvm.model.get_capacity_price(
-            isonode=self.isonode, year=year, mask=mask, 
-            dictcapacityprice=dictcapacityprice) * unitifier
-        
-        return dfcapacityprice
+
+        return (
+            pvvm.model.get_capacity_price(
+                isonode=self.isonode,
+                year=year,
+                mask=mask,
+                dictcapacityprice=dictcapacityprice,
+            )
+            * unitifier
+        )
     
     def get_co2_market_price(self, year, dollaryear='nominal'):
         """
@@ -361,6 +350,6 @@ class makeNode(object):
         if dollaryear == 'nominal':
             return co2price_nominal
         else:
-            co2price_inflated = (
-                co2price_nominal * pvvm.model.inflate(yearin=year, yearout=dollaryear))
-            return co2price_inflated
+            return co2price_nominal * pvvm.model.inflate(
+                yearin=year, yearout=dollaryear
+            )

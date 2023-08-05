@@ -71,15 +71,11 @@ resolutionlmps = {
 ### General use
 
 def constructpayload(**kwargs):
-    out = []
-    for kwarg in kwargs:
-        out.append('{}={}'.format(kwarg, kwargs[kwarg]))
-    stringout = '&'.join(out)
-    return stringout
+    out = [f'{kwarg}={value}' for kwarg, value in kwargs.items()]
+    return '&'.join(out)
 
 def constructquery(urlstart, **kwargs):
-    out = '{}{}'.format(urlstart, constructpayload(**kwargs))
-    return out
+    return '{}{}'.format(urlstart, constructpayload(**kwargs))
 
 def stampify(date, interval=pd.Timedelta('1H')):
     datetime = pd.Timestamp(date)
@@ -148,9 +144,9 @@ def download_file_series(urlstart, urlend, fileseries, filepath,
             except (HTTPError, IncompleteRead, EOFError) as err:
                 print(urlstodownload[i])
                 print(filestodownload[i])
-                print('Rebuffed on attempt # {} at {} by "{}".'
-                      'Will retry in {} seconds.'.format(
-                        attempts, pvvm.toolbox.nowtime(), err, sleeptime))
+                print(
+                    f'Rebuffed on attempt # {attempts} at {pvvm.toolbox.nowtime()} by "{err}".Will retry in {sleeptime} seconds.'
+                )
                 attempts += 1
                 time.sleep(sleeptime)
 
@@ -161,19 +157,16 @@ def download_file_series(urlstart, urlend, fileseries, filepath,
 def rowlatlon2x(row):
     latrad = row['latitude'] * math.pi / 180
     lonrad = row['longitude'] * math.pi / 180
-    x = math.cos(latrad) * math.cos(lonrad)
-    return x
+    return math.cos(latrad) * math.cos(lonrad)
 
 def rowlatlon2y(row):
     latrad = row['latitude'] * math.pi / 180
     lonrad = row['longitude'] * math.pi / 180
-    y = math.cos(latrad) * math.sin(lonrad)
-    return y
+    return math.cos(latrad) * math.sin(lonrad)
 
 def rowlatlon2z(row):
     latrad = row['latitude'] * math.pi / 180
-    z = math.sin(latrad)
-    return z
+    return math.sin(latrad)
 
 
 ############
@@ -219,12 +212,13 @@ def download_caiso_lmp_allnodes(market, start, filepathout,
             starttimestamp.day, starttimestamp.hour)
 
     url = constructquery(
-        urlstart, 
-        groupid='{}_LMP_GRP'.format(market),
+        urlstart,
+        groupid=f'{market}_LMP_GRP',
         startdatetime=startdatetime,
         enddatetime=enddatetime,
         version=1,
-        resultformat=6)
+        resultformat=6,
+    )
 
     attempts = 0
     while attempts < numattempts:
@@ -237,8 +231,7 @@ def download_caiso_lmp_allnodes(market, start, filepathout,
                 zip_file = zipfile.ZipFile(io.BytesIO(
                     urllib.request.urlopen(url).read()))
                 for csv_file in zip_file.infolist():
-                    if csv_file.filename.endswith(
-                        '{}_v1.csv'.format(product.upper())):
+                    if csv_file.filename.endswith(f'{product.upper()}_v1.csv'):
                         df = pd.read_csv(zip_file.open(csv_file.filename))
             else:
                 df = pd.read_csv(url, compression='zip')
@@ -246,25 +239,22 @@ def download_caiso_lmp_allnodes(market, start, filepathout,
             dfout = df[df['LMP_TYPE'] == product.upper()][columnsout]
 
             dfout.to_csv(
-                '{}{}'.format(filepathout, fileout),
+                f'{filepathout}{fileout}',
                 columns=columnsout,
                 index=False,
-                compression='gzip')
-            
+                compression='gzip',
+            )
+
             return dfout
         except (
             URLError, IncompleteRead, pd.errors.ParserError, 
             BadZipFile, KeyError, HTTPError, UnboundLocalError) as error:
-            print(
-                'Error for {} on attempt {}/{}: {}'.format(
-                    start, attempts, numattempts, error),
-                # end='\r',
-                )
+            print(f'Error for {start} on attempt {attempts}/{numattempts}: {error}')
             attempts += 1
             time.sleep(waittime)
-    
+
             if attempts >= numattempts:
-                raise URLError('{}{}'.format(filepathout, fileout))
+                raise URLError(f'{filepathout}{fileout}')
 
 def download_lmps(year, iso, market, overwrite=False, sleeptime=60,
     product='LMP', submarket=None, numattempts=200, subset=None,

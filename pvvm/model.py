@@ -52,13 +52,14 @@ def dropleap(dfin, year, resolution):
     """
     """
     assert len(dfin) % 8784 == 0, "dfin must be a leap year"
-    leapstart = pd.Timestamp('{}-02-29 00:00'.format(year))
-    dfout = dfin.drop(dfin.loc[
-        leapstart
-        :(leapstart
-          + pd.Timedelta('1D')
-          - pd.Timedelta('{}min'.format(resolution)))].index)
-    return dfout
+    leapstart = pd.Timestamp(f'{year}-02-29 00:00')
+    return dfin.drop(
+        dfin.loc[
+            leapstart : leapstart
+            + pd.Timedelta('1D')
+            - pd.Timedelta(f'{resolution}min')
+        ].index
+    )
 
 def downsample_trapezoid(dfin, output_freq='H', clip=None):
     """
@@ -68,18 +69,18 @@ def downsample_trapezoid(dfin, output_freq='H', clip=None):
         columns = dfin.columns
     elif type(dfin) is pd.Series:
         columns = [dfin.name]
-    
+
     ### Perform trapezoidal integration
-    dfin_hours = dfin.iloc[0::2].copy()
+    dfin_hours = dfin.iloc[::2].copy()
     dfin_halfhours = dfin.iloc[1::2].copy()
-    
+
     dfout = pd.DataFrame(
         (dfin_halfhours.values 
          + dfin_hours.rolling(2).mean().shift(-1).fillna(0).values),
         index=dfin_hours.index, columns=columns) / 2
-    
+
     dfout.index.freq = output_freq
-    
+
     ### Clip it, to get rid of small float errors
     if clip is not None:
         dfout = dfout.where(dfout > clip, 0)
@@ -87,7 +88,7 @@ def downsample_trapezoid(dfin, output_freq='H', clip=None):
     ### Convert back to series if necessary
     if type(dfin) is pd.Series:
         dfout = dfout[dfin.name]
-    
+
     return dfout
 
 
@@ -118,24 +119,24 @@ def timeserieslineup(
     ds1, ds2 = series1.copy(), series2.copy()
     ### Make sure the time series are well-formatted
     # assert (ds1.index[0].month == 1 and ds1.index[0].day == 1)
-    if not (ds1.index[0].month == 1 and ds1.index[0].day == 1):
+    if ds1.index[0].month != 1 or ds1.index[0].day != 1:
         print(ds1.head())
         print(ds1.tail())
-        print('len(series1) = {}'.format(len(ds1)))
+        print(f'len(series1) = {len(ds1)}')
         raise Exception('series1 is not well-formatted')
     # assert (ds2.index[0].month == 1 and ds2.index[0].day == 1)
-    if not (ds2.index[0].month == 1 and ds2.index[0].day == 1):
+    if ds2.index[0].month != 1 or ds2.index[0].day != 1:
         print(ds2.head())
         print(ds2.tail())
-        print('len(series2) = {}'.format(len(ds2)))
+        print(f'len(series2) = {len(ds2)}')
         raise Exception('series2 is not well-formatted')
-    
+
     ### Get properties
     tz1, tz2 = ds1.index.tz, ds2.index.tz
     name1, name2 = ds1.name, ds2.name
-    if name1 == None: name1 = 0
-    if name2 == None: name2 = 0
-            
+    if name1 is None: name1 = 0
+    if name2 is None: name2 = 0
+
     ### Determine resolutions if not entered
     freq2resolution = {'H': 60, '1H': 60, '60T': 60, 
                        '30T': 30, '15T': 15, 
@@ -147,50 +148,58 @@ def timeserieslineup(
                        '<5 * Minutes>': 5, 
                        '<Minute>': 1,
                       }
-    
-    if resolution1 == None:
+
+    if resolution1 is None:
         resolution1 = str(ds1.index.freq)
         resolution1 = freq2resolution[resolution1]
     else:
         resolution1 = freq2resolution.get(resolution1, resolution1)
-        
-    if resolution2 == None:
+
+    if resolution2 is None:
         resolution2 = str(ds2.index.freq)
         resolution2 = freq2resolution[resolution2]
     else:
         resolution2 = freq2resolution.get(resolution2, resolution2)
-        
+
     ### Get timezones if not entered
     tz1 = ds1.index.tz.__str__()
     tz2 = ds2.index.tz.__str__()
     if ((tz1 == 'None') and (tz2 != 'None')) or ((tz2 == 'None') and (tz1 != 'None')):
-        print('tz1 = {}\ntz2 = {}'.format(tz1,tz2))
+        print(f'tz1 = {tz1}\ntz2 = {tz2}')
         raise Exception("Can't align series when one is tz-naive and one is tz-aware")
-        
+
     ### Check if it's tmy, and if so, convert to 2001
     if oneyear:
         ## ds1
         if len(ds1.index.map(lambda x: x.year).unique()) != 1:
             ds1.index = pd.date_range(
-                '2001-01-01', '2002-01-01',
-                freq='{}T'.format(resolution1), tz=tz1, closed='left')
+                '2001-01-01',
+                '2002-01-01',
+                freq=f'{resolution1}T',
+                tz=tz1,
+                closed='left',
+            )
             year1 = 2001
         else:
             year1 = ds1.index[0].year
         ## ds2
         if len(ds2.index.map(lambda x: x.year).unique()) != 1:
             ds2.index = pd.date_range(
-                '2001-01-01', '2002-01-01',
-                freq='{}T'.format(resolution2), tz=tz2, closed='left')
+                '2001-01-01',
+                '2002-01-01',
+                freq=f'{resolution2}T',
+                tz=tz2,
+                closed='left',
+            )
             year2 = 2001
         else:
             year2 = ds2.index[0].year
-    
+
     ###### Either upsample or downsample
     if resampledirection.startswith('up'):
         ###### Upsample the lower-resolution dataset, if necessary
         resolution = min(resolution1, resolution2)
-        
+
         ## Upsample ds2
         if resolution1 < resolution2:
             ## Extend past the last value, for interpolation
@@ -200,15 +209,14 @@ def timeserieslineup(
                           index=[ds2.index[-1] + pd.Timedelta(resolution2, 'm')]))
             ## Interpolate
             if resamplemethod in ['ffill', 'forward', 'pad']:
-                ds2 = ds2.resample('{}T'.format(resolution1)).ffill()
+                ds2 = ds2.resample(f'{resolution1}T').ffill()
             elif resamplemethod in ['interpolate', 'time']:
                 ### NOTE that this still just ffills the last value
-                ds2 = ds2.resample('{}T'.format(resolution1)).interpolate('time')
+                ds2 = ds2.resample(f'{resolution1}T').interpolate('time')
             else:
-                raise Exception("Unsupported resamplemethod: {}".format(resamplemethod))
+                raise Exception(f"Unsupported resamplemethod: {resamplemethod}")
             ## Drop the extended value
             ds2.drop(ds2.index[-1], inplace=True)
-        ## Upsample ds1
         elif resolution1 > resolution2:
             ## Extend past the last value, for interpolation
             # ds1.loc[ds1.index.max() + 1] = ds1.iloc[-1]
@@ -217,12 +225,12 @@ def timeserieslineup(
                           index=[ds1.index[-1] + pd.Timedelta(resolution1, 'm')]))
             ## Interpolate
             if resamplemethod in ['ffill', 'forward', 'pad']:
-                ds1 = ds1.resample('{}T'.format(resolution2)).ffill()
+                ds1 = ds1.resample(f'{resolution2}T').ffill()
             elif resamplemethod in ['interpolate', 'time']:
                 ### NOTE that this still just ffills the last value
-                ds1 = ds1.resample('{}T'.format(resolution2)).interpolate('time')
+                ds1 = ds1.resample(f'{resolution2}T').interpolate('time')
             else:
-                raise Exception("Unsupported resamplemethod: {}".format(resamplemethod))
+                raise Exception(f"Unsupported resamplemethod: {resamplemethod}")
             ## Drop the extended value
             ds1.drop(ds1.index[-1], inplace=True)
     elif resampledirection.startswith('down'):
@@ -232,13 +240,10 @@ def timeserieslineup(
         assert ((resmax % resmin == 0) & (resmax // resmin == 2))
         ### Resample ds1 if it has finer resolution than ds2
         if resolution1 < resolution2:
-            ds1 = downsample_trapezoid(
-                dfin=ds1, output_freq='{}T'.format(resolution2), clip=clip)
-        ### Resample ds2 if it has finer resolution than ds1
+            ds1 = downsample_trapezoid(dfin=ds1, output_freq=f'{resolution2}T', clip=clip)
         elif resolution2 < resolution1:
-            ds2 = downsample_trapezoid(
-                dfin=ds2, output_freq='{}T'.format(resolution1), clip=clip)
-        
+            ds2 = downsample_trapezoid(dfin=ds2, output_freq=f'{resolution1}T', clip=clip)
+
     ### Drop leap days if ds1 and ds2 have different year lengths
     if oneyear:
         year1hours, year2hours = pvvm.toolbox.yearhours(year1), pvvm.toolbox.yearhours(year2)
@@ -249,28 +254,28 @@ def timeserieslineup(
         elif (year1hours == 8760) and (year2hours == 8784):
             # ds2 = dropleap(ds2, year2, resolution2)
             ds2 = dropleap(ds2, year2, resolution)
-    
+
     ### Check for errors
     if len(ds1) != len(ds2):
         if mismatch == 'raise':
-            print('Lengths: {}, {}'.format(len(ds1), len(ds2)))
-            print('Resolutions: {}, {}'.format(resolution1, resolution2))
+            print(f'Lengths: {len(ds1)}, {len(ds2)}')
+            print(f'Resolutions: {resolution1}, {resolution2}')
             print(ds1.head(3))
             print(ds1.tail(3))
             print(ds2.head(3))
             print(ds2.tail(3))
             raise Exception('Mismatched lengths')
         elif mismatch == 'verbose':
-            print('Lengths: {}, {}'.format(len(ds1), len(ds2)))
-            print('Resolutions: {}, {}'.format(resolution1, resolution2))
+            print(f'Lengths: {len(ds1)}, {len(ds2)}')
+            print(f'Resolutions: {resolution1}, {resolution2}')
             print(ds1.head(3))
             print(ds1.tail(3))
             print(ds2.head(3))
             print(ds2.tail(3))
             warn('Mismatched lengths')
         elif mismatch == 'warn':
-            warn('Mismatched lengths: {}, {}'.format(len(ds1), len(ds2)))
-        
+            warn(f'Mismatched lengths: {len(ds1)}, {len(ds2)}')
+
     ###### Align years
     if oneyear:
         yeardiff = year1 - year2
@@ -286,9 +291,6 @@ def timeserieslineup(
             year2diff = yearout - year2
             ds1.index = ds1.index + pd.DateOffset(years=year1diff)
             ds2.index = ds2.index + pd.DateOffset(years=year2diff)
-        else:
-            pass
-
     ### Align and clip time zones, if necessary
     if tz1 != tz2:
         if tzout in ['left', 1, '1']:
@@ -299,7 +301,7 @@ def timeserieslineup(
             ds1 = (pd.DataFrame(ds1.tz_convert(tz2))
                    .merge(pd.DataFrame(index=ds2.index), left_index=True, right_index=True)
                   )[name1]
-            
+
     return ds1, ds2
 
 
@@ -364,18 +366,17 @@ class PVsystem:
         care about getting the right location.
         * Safest approach is to use an explicit nsrdbfile path and query==False.
         """
-        if not os.path.exists(
+        if os.path.exists(
                 os.path.join(pvvm.toolbox.pathify(nsrdbpathin), nsrdbfile)):
-            if query == True:
-                _,_,_,_,fullpath = pvvm.io.queryNSRDBfile(
-                    nsrdbfile, year, returnfilename=True, **kwargs)
-            elif query == False:
-                print(nsrdbpathin)
-                print(nsrdbfile)
-                raise FileNotFoundError
-        else:
             fullpath = nsrdbfile
 
+        elif query == True:
+            _,_,_,_,fullpath = pvvm.io.queryNSRDBfile(
+                nsrdbfile, year, returnfilename=True, **kwargs)
+        elif query == False:
+            print(nsrdbpathin)
+            print(nsrdbfile)
+            raise FileNotFoundError
         return pv_system_sim(
             nsrdbfile=fullpath, year=year, systemtype=self.systemtype, 
             axis_tilt=self.axis_tilt, axis_azimuth=self.axis_azimuth,
@@ -395,9 +396,7 @@ def loss_reflect_abs(aoi, n_glass=1.526, n_ar=1.3, n_air=1, K=4., L=0.002):
     """
     if isinstance(aoi, pd.Series):
         aoi.loc[aoi <= 1e-6] = 1e-6
-    elif isinstance(aoi, float):
-        aoi = max(aoi, 1e-6)
-    elif isinstance(aoi, int):
+    elif isinstance(aoi, (float, int)):
         aoi = max(aoi, 1e-6)
     elif isinstance(aoi, np.ndarray):
         aoi[aoi <= 1e-6] = 1e-6

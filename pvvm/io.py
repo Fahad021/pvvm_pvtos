@@ -56,17 +56,21 @@ def getNSRDBfile(filepath, filename, year, resolution=30, forcemidnight=False):
         raise Exception("Bad year query. Must be integer or 'tmy'.")
 
     filepath = pvvm.toolbox.pathify(filepath)
-    
+
     info = pd.read_csv(filepath+filename, nrows=1)
     timezone, elevation = int(info['Local Time Zone'][0]), float(info['Elevation'][0])
     tz = 'Etc/GMT{0:+}'.format(-timezone) ### <-- {:+} is also ok
 
     dfsun = pd.read_csv(filepath+filename, skiprows=2)
-    
+
     if type(year) == int and forcemidnight == True:
-        dfsun = dfsun.set_index(pd.date_range('1/1/{yr}'.format(yr=year), 
-            freq=str(resolution)+'Min', 
-            periods=yearhours(year)*60/resolution))
+        dfsun = dfsun.set_index(
+            pd.date_range(
+                '1/1/{yr}'.format(yr=year),
+                freq=f'{str(resolution)}Min',
+                periods=yearhours(year) * 60 / resolution,
+            )
+        )
     else:
         dfsun.index = pd.to_datetime(dfsun[['Year', 'Month', 'Day', 'Hour', 'Minute']])
         if year == 'tmy': 
@@ -75,7 +79,7 @@ def getNSRDBfile(filepath, filename, year, resolution=30, forcemidnight=False):
             dfsun.drop('Unnamed: 10', axis=1, errors='ignore', inplace=True)
 
     dfsun.index = dfsun.index.tz_localize(tz)
-    
+
     return dfsun, info, tz, elevation
 
 def getNSRDBinfo(filepath=None, filename=None, **kwargs):
@@ -85,12 +89,10 @@ def getNSRDBinfo(filepath=None, filename=None, **kwargs):
         inpath = filename
     elif (filename is None) and (filepath is not None):
         inpath = filepath
-    elif (filepath is not None) and (filename is not None):
+    elif filepath is not None:
         inpath = os.path.join(filepath, filename)
 
-    # filepath = pvvm.toolbox.pathify(filepath)
-    info = pd.read_csv(inpath, nrows=1).T.to_dict()[0]
-    return info
+    return pd.read_csv(inpath, nrows=1).T.to_dict()[0]
 
 
 def queryNSRDBfile(filename=None, year=None, filepath=None, resolution=None, 
@@ -103,63 +105,54 @@ def queryNSRDBfile(filename=None, year=None, filepath=None, resolution=None,
     * filepath must be None if doing arbitrary query
     '''
     ### Set defaults
-    if year in [None, 'tmy']:
-        year = 'tmy'
-    else:
-        year = int(year)
-
+    year = 'tmy' if year is None or year == 'tmy' else int(year)
     if resolution is None:
-        if year == 'tmy': resolution = 60
-        else: resolution = 30
-
+        resolution = 60 if year == 'tmy' else 30
     ### Clean up inputs
     filepath = pvvm.toolbox.pathify(filepath)
     fullpath = os.path.join(filepath, filename)
 
     ### Set filenames in case function is being used for query
-    if filepath == '':
-        querypath = revmpath + 'Data/NSRDB/'
-    else:
-        querypath = filepath
+    querypath = revmpath + 'Data/NSRDB/' if filepath == '' else filepath
     if filetype is None:
         filetype = '.csv'
     queryname = filename.replace(' ','_')
-    fullquerypath = os.path.join(
-        querypath, queryname+'-{}{}'.format(year, filetype))
-    
+    fullquerypath = os.path.join(querypath, queryname + f'-{year}{filetype}')
+
     ### Get NSRDB file for arbitrary query
-    if (not os.path.exists(fullpath)) and (not os.path.exists(fullquerypath)):
-        if download == False:
-            raise Exception('Cannot locate {}'.format(fullpath))
+    if not os.path.exists(fullpath):
+        if not os.path.exists(fullquerypath):
+            if download == False:
+                raise Exception(f'Cannot locate {fullpath}')
 
-        ###### Get lat/lon from googlemaps if type(query) is str
-        ### Set up googlemaps
-        import googlemaps
-        gmaps = googlemaps.Client(key=apikeys['googlemaps'])
+            ###### Get lat/lon from googlemaps if type(query) is str
+            ### Set up googlemaps
+            import googlemaps
+            gmaps = googlemaps.Client(key=apikeys['googlemaps'])
 
-        ### Get latitude and longitude of query
-        location = gmaps.geocode(filename)
-        lat = location[0]['geometry']['location']['lat']
-        lon = location[0]['geometry']['location']['lng']
+            ### Get latitude and longitude of query
+            location = gmaps.geocode(filename)
+            lat = location[0]['geometry']['location']['lat']
+            lon = location[0]['geometry']['location']['lng']
 
-        ### Set defaults if necessary
-        if attributes is None:
-            attributes='ghi,dni,dhi,solar_zenith_angle,air_temperature,wind_speed'
-        if year == 2016:
-            psmversion = 3
-        if filepath == '':
-            filepath = revmpath + 'Data/NSRDB/'
-        os.makedirs(filepath, exist_ok=True)
+            ### Set defaults if necessary
+            if attributes is None:
+                attributes='ghi,dni,dhi,solar_zenith_angle,air_temperature,wind_speed'
+            if year == 2016:
+                psmversion = 3
+            if filepath == '':
+                filepath = revmpath + 'Data/NSRDB/'
+            os.makedirs(filepath, exist_ok=True)
 
-        ### Download file from NSRDB
-        dfin, fullpath = pvvm.data.downloadNSRDBfile(
-            lat=lat, lon=lon, year=year, filepath=filepath,
-            nodename=filename.replace(' ','_'), filetype=filetype,
-            attributes=attributes, leap_day=leap_day, interval=str(resolution),
-            utc=utc, psmversion=psmversion, write=True, return_savename=True)
+            ### Download file from NSRDB
+            dfin, fullpath = pvvm.data.downloadNSRDBfile(
+                lat=lat, lon=lon, year=year, filepath=filepath,
+                nodename=filename.replace(' ','_'), filetype=filetype,
+                attributes=attributes, leap_day=leap_day, interval=str(resolution),
+                utc=utc, psmversion=psmversion, write=True, return_savename=True)
 
-    elif (not os.path.exists(fullpath)) and (os.path.exists(fullquerypath)):
-        fullpath = fullquerypath
+        elif os.path.exists(fullquerypath):
+            fullpath = fullquerypath
 
     ### Load NSRDB file    
     info = pd.read_csv(fullpath, nrows=1)
@@ -167,11 +160,15 @@ def queryNSRDBfile(filename=None, year=None, filepath=None, resolution=None,
     tz = 'Etc/GMT{0:+}'.format(-timezone) ### <-- {:+} is also ok
 
     dfsun = pd.read_csv(fullpath, skiprows=2)
-    
+
     if type(year) == int and forcemidnight == True:
-        dfsun = dfsun.set_index(pd.date_range('1/1/{yr}'.format(yr=year), 
-            freq=str(resolution)+'Min', 
-            periods=yearhours(year)*60/resolution))
+        dfsun = dfsun.set_index(
+            pd.date_range(
+                '1/1/{yr}'.format(yr=year),
+                freq=f'{str(resolution)}Min',
+                periods=yearhours(year) * 60 / resolution,
+            )
+        )
     else:
         dfsun.index = pd.to_datetime(dfsun[['Year', 'Month', 'Day', 'Hour', 'Minute']])
         if year == 'tmy': 
@@ -180,7 +177,7 @@ def queryNSRDBfile(filename=None, year=None, filepath=None, resolution=None,
             dfsun.drop('Unnamed: 10', axis=1, errors='ignore', inplace=True)
 
     dfsun.index = dfsun.index.tz_localize(tz)
-    
+
     if returnfilename:
         return dfsun, info, tz, elevation, fullpath
     else:
@@ -208,7 +205,7 @@ def getLMPfile(filepath, filename, tz, squeeze=False, product='lmp'):
     elif product.lower() in ['mce','mec','energy']:
         product = 'mce'
     else:
-        raise Exception("invalid product: {}".format(product))
+        raise Exception(f"invalid product: {product}")
 
     ### Modifity lmp path to product path, if necessary
     if product in ['mcc', 'mce', 'mcl']:

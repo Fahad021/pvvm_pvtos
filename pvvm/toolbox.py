@@ -227,17 +227,14 @@ state2fips = {
 ###############
 
 def yearhours(year):
-    if year == 'tmy':
-        hours = 365*24
-    elif year % 4 != 0:
-        hours = 365*24
-    elif year % 100 != 0:
-        hours = 366*24
-    elif year % 400 != 0:
-        hours = 365*24
-    else:
-        hours = 366*24
-    return hours
+    return (
+        365 * 24
+        if year == 'tmy'
+        or year % 4 != 0
+        or year % 100 == 0
+        and year % 400 != 0
+        else 366 * 24
+    )
 
 def monthhours(year, month):
     """
@@ -277,46 +274,45 @@ def makedays(year, style='yyyymmdd'):
         mon = '{:02d}'.format(month + 1)
         for day in range(monthdays[mon]):
             d = '{:02d}'.format(day + 1)
-            if style == 'yyyymmdd':
-                daysout.append(yr + mon + d)
+            if style == 'mm/dd/yyyy':
+                daysout.append(f'{mon}/{d}/{yr}')
             elif style == 'yyyy-mm-dd':
-                daysout.append(yr + '-' + mon + '-' + d)
-            elif style == 'mm/dd/yyyy':
-                daysout.append(mon + '/' + d + '/' + yr)
+                daysout.append(f'{yr}-{mon}-{d}')
+            elif style == 'yyyymmdd':
+                daysout.append(yr + mon + d)
     return daysout
 
 def pathify(path=None, add='', make=False):
     if path is None:
         path = ''
     path, add = str(path), str(add)
-    if len(path) != 0 and path[-1] != '/':
-        path = path + '/'
-    
-    path = path + add
+    if path != "" and path[-1] != '/':
+        path += '/'
+
+    path += add
     if path != '':
         if path[-1] != '/': 
-            path = path + '/'
-    
+            path += '/'
+
     if make==True:
-        if os.path.isdir(path):
-            pass
-        else:
+        if not os.path.isdir(path):
             os.mkdir(path)
 
     return path
 
 def nowtime():
     now = time.localtime()
-    out = (str(now.tm_year) +
-        '{:02d}'.format(now.tm_mon) + 
-        '{:02d}'.format(now.tm_mday) + 
-        ' ' +
-        '{:02d}'.format(now.tm_hour) + 
-        ':' +
-        '{:02d}'.format(now.tm_min) + 
-        ':' + 
-        '{:02d}'.format(now.tm_sec))
-    return out
+    return (
+        str(now.tm_year)
+        + '{:02d}'.format(now.tm_mon)
+        + '{:02d}'.format(now.tm_mday)
+        + ' '
+        + '{:02d}'.format(now.tm_hour)
+        + ':'
+        + '{:02d}'.format(now.tm_min)
+        + ':'
+        + '{:02d}'.format(now.tm_sec)
+    )
 
 def undodst(datetime, keepfallbackhour=True):
     if type(datetime) != pd.Timestamp:
@@ -330,43 +326,39 @@ def undodst(datetime, keepfallbackhour=True):
         dstend = dst_fallback[year] + ' 02:00'
     dstend = pd.to_datetime(dstend)
 
-    if (datetime >= dststart) and (datetime <= dstend):
-        datetimeout = datetime - pd.Timedelta('1H')
-    else:
-        datetimeout = datetime
-
-    return datetimeout
+    return (
+        datetime - pd.Timedelta('1H')
+        if (datetime >= dststart) and (datetime <= dstend)
+        else datetime
+    )
 
 def testsave(savename):
-    if os.path.isfile(savename):
-        print("WARNING: A file already exists for name '{}'.".format(savename))
-        gonogo = input("Do you want to overwrite it? y/[n]")
-        if gonogo.lower() == 'y':
-            return savename
-        else:
-            newname = input("Do you want to create a new savename? [y]/n ")
-            if newname.lower() == 'n':
-                quit()
-            else:
-                savename = input("Enter new filename (include folder and extension, no quotes): ")
-                return testsave(savename)
-    else:
+    if not os.path.isfile(savename):
         return savename
+    print(f"WARNING: A file already exists for name '{savename}'.")
+    gonogo = input("Do you want to overwrite it? y/[n]")
+    if gonogo.lower() == 'y':
+        return savename
+    newname = input("Do you want to create a new savename? [y]/n ")
+    if newname.lower() == 'n':
+        quit()
+    else:
+        savename = input("Enter new filename (include folder and extension, no quotes): ")
+        return testsave(savename)
 
 def safesave(savename):
     goodstuff = len(os.path.splitext(savename)[0])
-    if os.path.isfile(savename):
-        if savename[goodstuff - 5] == '(' and savename[goodstuff - 1] == ')':
-            oldfiller = int(savename[goodstuff - 4:goodstuff - 1])
-            newfiller = oldfiller + 1
-            newname = (savename[:goodstuff - 4]
-                       + '{:03d}'.format(newfiller) 
-                       + savename[goodstuff - 1:])
-        else:
-            newname = (savename[:goodstuff] + ' (001)' + savename[goodstuff:])
-        return safesave(newname)
-    else: 
+    if not os.path.isfile(savename):
         return savename
+    if savename[goodstuff - 5] == '(' and savename[goodstuff - 1] == ')':
+        oldfiller = int(savename[goodstuff - 4:goodstuff - 1])
+        newfiller = oldfiller + 1
+        newname = (savename[:goodstuff - 4]
+                   + '{:03d}'.format(newfiller) 
+                   + savename[goodstuff - 1:])
+    else:
+        newname = (savename[:goodstuff] + ' (001)' + savename[goodstuff:])
+    return safesave(newname)
 
 ##################
 ### GEOGRAPHIC ###
@@ -495,7 +487,7 @@ def pointpolymap(
         ### changed 20190620
         # dfpoints, dfpoly = dfpointsin.copy(), dfpolyin.copy()
         dfpoints, dfpoly = dfpointsin.copy(), dfpolyin
-        
+
     point_lonlats = list(zip(dfpoints[x].values, dfpoints[y].values))
     ###### added 20190620
     if type(dfpoly) == shapely.geometry.polygon.Polygon:
@@ -524,17 +516,17 @@ def pointpolymap(
                 polynamesout.append(namelist[j])
         polybools.append(polyboolsout)
         polynames.append(polynamesout)
-    
+
     ### Check for overlaps
     foo = []
     for i in range(len(polybools)):
         foo.append(len(polybools[i]))
-        if len(polybools[i]) > 1:
-            if verbose:
+        if verbose:
+            if len(polybools[i]) > 1:
                 print(i)
                 print(polybools[i])
                 print(polynames[i])
-    
+
     ### Write output list
     polyboolsflat = []
     polynamesflat = []
@@ -545,10 +537,10 @@ def pointpolymap(
         except IndexError:
             polyboolsflat.append(False)
             polynamesflat.append('')
-    
+
     ### Deal with multiply-assigned points if necessary
     if pd.Series(foo).max() > 1:
-        print('max overlap = {}'.format(pd.Series(foo).max()))
+        print(f'max overlap = {pd.Series(foo).max()}')
         if multipleassignment=='flatlists':
             print('returning (polynamesflat, polyboolsflat)')
             return polynamesflat, polyboolsflat
@@ -560,7 +552,7 @@ def pointpolymap(
         elif multipleassignment in ['silent', 'pass']:
             print('returning polynamesflat')
             return polynamesflat
-    
+
     return polynamesflat
 
 
@@ -582,10 +574,10 @@ def voronoi_polygons(dfpoints):
     """
     import shapely, scipy.spatial, pyproj
     import geopandas as gpd
-    
+
     ### Get latitude and longitude column names
     latlabel, lonlabel = get_latlonlabels(dfpoints)
-    
+
     ### Get polygons
     points = dfpoints[[lonlabel,latlabel]].values
     vor = scipy.spatial.Voronoi(points)
@@ -615,21 +607,28 @@ def voronoi_polygons(dfpoints):
 
     ### Calculate areas in square kilometers
     areas = []
-    for i, (poly, coord, bound) in enumerate(list(zip(polys, coords, bounds))):
-        pa = pyproj.Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
-            bound[1], bound[3], (bound[1]+bound[3])/2, (bound[0]+bound[2])/2))
+    for poly, coord, bound in list(zip(polys, coords, bounds)):
+        pa = pyproj.Proj(
+            f"+proj=aea +lat_1={bound[1]} +lat_2={bound[3]} +lat_0={(bound[1] + bound[3]) / 2} +lon_0={(bound[0] + bound[2]) / 2}"
+        )
         lon,lat = zip(*coord)
         x,y = pa(lon,lat)
         cop = {'type':'Polygon','coordinates':[zip(x,y)]}
         areas.append(shapely.geometry.shape(cop).area/1000000)
 
-    ### Make and return output dataframe
-    dfpoly = gpd.GeoDataFrame(pd.DataFrame(
-        {'coords':coords, 'bounds':bounds,
-         'centroid':centroids,'centroid_lon':centroid_x,'centroid_lat':centroid_y,
-         'area':areas, 'geometry':polys,}))
-    
-    return dfpoly
+    return gpd.GeoDataFrame(
+        pd.DataFrame(
+            {
+                'coords': coords,
+                'bounds': bounds,
+                'centroid': centroids,
+                'centroid_lon': centroid_x,
+                'centroid_lat': centroid_y,
+                'area': areas,
+                'geometry': polys,
+            }
+        )
+    )
 
 
 def get_area_latlon(shape):
@@ -646,15 +645,15 @@ def get_area_latlon(shape):
         coord = shape.exterior.coords
         bound = shape.bounds
         ### Project into equal-area coordinates
-        pa = pyproj.Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
-            bound[1], bound[3], (bound[1]+bound[3])/2, (bound[0]+bound[2])/2))
+        pa = pyproj.Proj(
+            f"+proj=aea +lat_1={bound[1]} +lat_2={bound[3]} +lat_0={(bound[1] + bound[3]) / 2} +lon_0={(bound[0] + bound[2]) / 2}"
+        )
         lon,lat = zip(*coord)
         x,y = pa(lon,lat)
         ### Make new polygon in equal-area coordinates
         cop = {'type':'Polygon','coordinates':[zip(x,y)]}
         ### Calculate the area [km^2]
         area = shapely.geometry.shape(cop).area/1000000
-    ### If multipolygon
     elif type(shape) == shapely.geometry.multipolygon.MultiPolygon:
         subareas = []
         for subpoly in shape:
@@ -662,8 +661,9 @@ def get_area_latlon(shape):
             coord = subpoly.exterior.coords
             bound = subpoly.bounds
             ### Project into equal-area coordinates
-            pa = pyproj.Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
-                bound[1], bound[3], (bound[1]+bound[3])/2, (bound[0]+bound[2])/2))
+            pa = pyproj.Proj(
+                f"+proj=aea +lat_1={bound[1]} +lat_2={bound[3]} +lat_0={(bound[1] + bound[3]) / 2} +lon_0={(bound[0] + bound[2]) / 2}"
+            )
             lon,lat = zip(*coord)
             x,y = pa(lon,lat)
             ### Make new polygon in equal-area coordinates
@@ -687,19 +687,19 @@ def polyoverlaparea_km2(poly1, poly2=None, method='intersection', returnpoly=Fal
         polyout = poly1.difference(poly2)
     elif method in ['intersection']:
         polyout = poly1.intersection(poly2)
-        
+
     ### If no overlap
     if polyout.is_empty:
         area = 0
 
-    ### Easy way, if polyout is simple polygon
     elif type(polyout) == shapely.geometry.polygon.Polygon:
         ### Get coords, bounds, and centroid
         coord = polyout.exterior.coords
         bound = polyout.bounds
         ### Project into equal-area coordinates
-        pa = pyproj.Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
-            bound[1], bound[3], (bound[1]+bound[3])/2, (bound[0]+bound[2])/2))
+        pa = pyproj.Proj(
+            f"+proj=aea +lat_1={bound[1]} +lat_2={bound[3]} +lat_0={(bound[1] + bound[3]) / 2} +lon_0={(bound[0] + bound[2]) / 2}"
+        )
         lon,lat = zip(*coord)
         x,y = pa(lon,lat)
         ### Make new polygon in equal-area coordinates
@@ -707,7 +707,6 @@ def polyoverlaparea_km2(poly1, poly2=None, method='intersection', returnpoly=Fal
         ### Calculate the area
         area = shapely.geometry.shape(cop).area/1000000
 
-    ### If multipolygon
     elif type(polyout) in [shapely.geometry.multipolygon.MultiPolygon, 
                            shapely.geometry.collection.GeometryCollection]:
         subareas = []
@@ -719,8 +718,9 @@ def polyoverlaparea_km2(poly1, poly2=None, method='intersection', returnpoly=Fal
             coord = subpoly.exterior.coords
             bound = subpoly.bounds
             ### Project into equal-area coordinates
-            pa = pyproj.Proj("+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
-                bound[1], bound[3], (bound[1]+bound[3])/2, (bound[0]+bound[2])/2))
+            pa = pyproj.Proj(
+                f"+proj=aea +lat_1={bound[1]} +lat_2={bound[3]} +lat_0={(bound[1] + bound[3]) / 2} +lon_0={(bound[0] + bound[2]) / 2}"
+            )
             lon,lat = zip(*coord)
             x,y = pa(lon,lat)
             ### Make new polygon in equal-area coordinates
@@ -730,13 +730,10 @@ def polyoverlaparea_km2(poly1, poly2=None, method='intersection', returnpoly=Fal
             subareas.append(subarea)
         ### Sum the area
         area = sum(subareas)
-    
-        
+
+
     ### Return results
-    if returnpoly is False:
-        return area
-    else:
-        return area, polyout
+    return area if returnpoly is False else (area, polyout)
 
 
 def voronoi_polygon_overlap(
@@ -757,11 +754,7 @@ def voronoi_polygon_overlap(
     ### Get latitude and longitude column names
     latlabel, lonlabel = get_latlonlabels(dfcoords)
     ### Get index label if necessary
-    if index_coords is None:
-        indexlabel = 'index'
-    else:
-        indexlabel = index_coords
-
+    indexlabel = 'index' if index_coords is None else index_coords
     ###### Get bounding box for region, add buffer
     regionbounds = {
         'longitude':[polyoverlap.bounds[0]-polybuffer, polyoverlap.bounds[2]+polybuffer],
@@ -813,12 +806,12 @@ def voronoi_polygon_overlap(
             ### Calculate overlap area
             area, overlap = polyoverlaparea_km2(
                 poly, polyoverlap, method='intersection', returnpoly=True)
-        
+
         ### Add the area to the total
         area_total += area
         polys_zoneoverlap[index].append(overlap)
         areas_zoneoverlap[index].append(area)
-        
+
         ### If there is overlap, pull out additional data
         if area > 0:
             querylon, querylat = dfpoly.loc[
@@ -842,9 +835,7 @@ def voronoi_polygon_overlap(
         pd.DataFrame(regionpoly2site, index=[indexlabel]).T,
         left_index=True, right_index=True)[[indexlabel,'km2']]
 
-    if returnfull == False:
-        pass
-    else:
+    if returnfull != False:
         import geopandas as gpd
         polyoverlaps = pd.DataFrame(polys_zoneoverlap, index=['geometry']).T
         polyoverlaps = polyoverlaps.merge(
@@ -852,7 +843,7 @@ def voronoi_polygon_overlap(
             left_index=True, right_index=True)[[indexlabel,'geometry']]
         polyweights = gpd.GeoDataFrame(polyweights.merge(
             polyoverlaps, on=indexlabel)[[indexlabel, 'km2', 'geometry']])
-    
+
     return polyweights
     # return polyweights, polyoverlaps
 

@@ -117,12 +117,12 @@ def rainbowmapper(iterable, colormap=None, explicitcolors=False):
         colors=[plt.cm.viridis(i) for i in np.linspace(0,1,len(iterable))]
     out = dict(zip(iterable, colors))
     if explicitcolors:
-        explicit = {
-            'C0': '#1f77b4', 'C1': '#ff7f0e', 'C2': '#2ca02c', 'C3': '#d62728',
-            'C4': '#9467bd', 'C5': '#8c564b', 'C6': '#e377c2', 'C7': '#7f7f7f',
-            'C8': '#bcbd22', 'C9': '#17becf',
-        }
         if len(iterable) <= 10:
+            explicit = {
+                'C0': '#1f77b4', 'C1': '#ff7f0e', 'C2': '#2ca02c', 'C3': '#d62728',
+                'C4': '#9467bd', 'C5': '#8c564b', 'C6': '#e377c2', 'C7': '#7f7f7f',
+                'C8': '#bcbd22', 'C9': '#17becf',
+            }
             out = {c: explicit[out[c]] for c in iterable}
     return out
 
@@ -174,22 +174,21 @@ def addcolorbarhist(
         vmin = data.min()
     if vmax == 'default':
         vmax = data.max()
-        
+
     if bins is None:
         bins = np.linspace(vmin, vmax, nbins)
-    elif type(bins) is np.ndarray:
-        pass
-    else:
+    elif type(bins) is not np.ndarray:
         print(type(bins), bins)
         print(type(nbins, nbins))
         raise Exception('Specify bins as np.ndarray or nbins as int')
     ax0x0, ax0y0, ax0width, ax0height = ax0.get_position().bounds
-    
+
     ### Defaults for colorbar position
-    if (cbarbottom is None) and (orientation == 'horizontal'):
-        cbarbottom = 1.05
-    elif (cbarbottom is None) and (orientation == 'vertical'):
-        cbarbottom = (1 - cbarheight) / 2
+    if cbarbottom is None:
+        if orientation == 'horizontal':
+            cbarbottom = 1.05
+        elif orientation == 'vertical':
+            cbarbottom = (1 - cbarheight) / 2
 
     ### Set extension
     if extend:
@@ -210,7 +209,7 @@ def addcolorbarhist(
         ax1bottom = ax0y0 + ax0height * cbarbottom
         ax1width = cbarheight * ax0width
         ax1height = cbarwidth * ax0height
-        
+
         ax1 = f.add_axes([ax1left, ax1bottom, ax1width, ax1height])
 
         cb1 = mpl.colorbar.ColorbarBase(
@@ -245,7 +244,7 @@ def addcolorbarhist(
             }
             xy['bottom center'], xy['top center'] = xy['bottom'], xy['top']
             xy['center bottom'], xy['center top'] = xy['bottom'], xy['top']
-            
+
             va = {
                 'bottom': 'top',
                 'top': 'bottom',
@@ -256,7 +255,7 @@ def addcolorbarhist(
             }
             va['bottom center'], va['top center'] = va['bottom'], va['top']
             va['center bottom'], va['center top'] = va['bottom'], va['top']
-            
+
             ha = {
                 'bottom': 'center',
                 'top': 'center',
@@ -273,7 +272,7 @@ def addcolorbarhist(
                 xycoords='axes fraction',
                 va=va[title_alignment], xy=xy[title_alignment],
                 ha=ha[title_alignment])
-    
+
     ### Vertical orientation
     elif orientation in ['vertical', 'vert', 'v', None]:
         ax1left = ax0width + ax0x0 + (ax0width * (cbarleft - 1))
@@ -357,15 +356,13 @@ def plot2dhistarray(xdata, ydata, logcolor=True, bins=None,
         if (type(bins[0]) == int) and (type(bins[1]) == int):
             bins = [np.linspace(min(xdata), max(xdata), bins[0]), 
                     np.linspace(min(ydata), max(ydata), bins[1])]
-        elif (type(bins[0] == np.ndarray) and (type(bins[1]) == np.ndarray)):
-            pass
     elif type(bins) == np.ndarray:
         bins = [bins, bins]
-    elif bins == None:
+    elif bins is None:
         bins = [np.linspace(min(xdata), max(xdata), 101), 
                 np.linspace(min(ydata), max(ydata), 101)]
 
-    if gridspec_kw == None:
+    if gridspec_kw is None:
         gridspec_kw = {'height_ratios': [1,6], 'width_ratios': [6,1], 
                        'hspace':0.02, 'wspace': 0.02}
     ### Procedure
@@ -432,11 +429,11 @@ def plotquarthist(
     * pad, if not None, overwrites histpad and quartpad
     """
     ### Interpret inputs
-    if flierprops == None:
+    if flierprops is None:
         flierprops={'markersize': 2, 'markerfacecolor': 'none',
                     'markeredgewidth': 0.25, 'markeredgecolor': '0.5'}
 
-    if hist_range == None:
+    if hist_range is None:
         hist_range = (dfplot.min().min(), dfplot.max().max())
     else:
         assert (len(hist_range)==2 or type(hist_range) in [float, int]) 
@@ -444,15 +441,16 @@ def plotquarthist(
     labels = list(dfplot.columns)
     data_sets = [dfplot[label].dropna().values for label in labels]
 
-    if x_locations == None:
+    if x_locations is None:
         x_locations = dfplot.columns.values
-        if any([type(col) == str for col in x_locations]):
+        if any(type(col) == str for col in x_locations):
             x_locations = range(len(x_locations))
 
-    if (pad != None) and (direction == 'right'):
-        histpad, quartpad = pad, -pad
-    elif (pad != None) and (direction == 'left'):
-        histpad, quartpad = -pad, pad
+    if pad != None:
+        if direction == 'right':
+            histpad, quartpad = pad, -pad
+        elif direction == 'left':
+            histpad, quartpad = -pad, pad
 
     ###### Some shared quantities between quarts and hists
     ### Minimum distance between x points in units of x scale
@@ -503,8 +501,8 @@ def plotquarthist(
     ###### Quartlines
     ### Calculate medians and confidence interals
     medians, cilos, cihis = [], [], []
-    for i in range(len(data_sets)):
-        medianstats = mpl.cbook.boxplot_stats(data_sets[i], bootstrap=bootstrap)[0]
+    for data_set in data_sets:
+        medianstats = mpl.cbook.boxplot_stats(data_set, bootstrap=bootstrap)[0]
         medians.append(medianstats['med'])
         cilos.append(medianstats['cilo'])
         cihis.append(medianstats['cihi'])
@@ -554,14 +552,13 @@ def plotquarthist(
     ## Botstrapped 95% confidence intervals for median
     for i in range(len(data_sets)):
         ### Set median range color
-        if type(cicolor) == list: c = cicolor[i]
-        else: c = cicolor
-        ### Plot median bars
-        ax.plot(np.array([x_locations[i], x_locations[i]]) + (quartpad * xscale), 
-                [cilos[i], cihis[i]],
-                zorder=4999, solid_capstyle='butt',
-                lw=ciwidth, c=c, 
-    )
+        c = cicolor[i] if type(cicolor) == list else cicolor
+            ### Plot median bars
+            ax.plot(np.array([x_locations[i], x_locations[i]]) + (quartpad * xscale), 
+                    [cilos[i], cihis[i]],
+                    zorder=4999, solid_capstyle='butt',
+                    lw=ciwidth, c=c, 
+        )
 
     ### Axis formatting
     if format_axes:
@@ -572,17 +569,18 @@ def plotquarthist(
         else:
             ax.set_xticklabels(labels, rotation=xticklabelrotation, 
                 ha='right', rotation_mode='anchor')
-        if plothist and (direction == 'right'):
-            ax.set_xlim(x_locations[0] - 5 * abs(quartpad) * xscale, 
-                        (x_locations[-1] + max(scaled_data_sets[-1])
-                         + 1.5 * abs(histpad) * xscale)
-                        ) # ^ changed from 0 to 1.5 on 20180413
-        elif plothist and (direction == 'left'):
-            ## Provide some extra padding on the left
-            ax.set_xlim((x_locations[0] - max(scaled_data_sets[0]) 
-                         - 1.5 * abs(histpad) * xscale), 
-                        x_locations[-1] + 3 * abs(quartpad) * xscale
-                        ) # ^ changed from 3.0 to 1.5 on 20180413
+        if plothist:
+            if direction == 'right':
+                ax.set_xlim(x_locations[0] - 5 * abs(quartpad) * xscale, 
+                            (x_locations[-1] + max(scaled_data_sets[-1])
+                             + 1.5 * abs(histpad) * xscale)
+                            ) # ^ changed from 0 to 1.5 on 20180413
+            elif direction == 'left':
+                ## Provide some extra padding on the left
+                ax.set_xlim((x_locations[0] - max(scaled_data_sets[0]) 
+                             - 1.5 * abs(histpad) * xscale), 
+                            x_locations[-1] + 3 * abs(quartpad) * xscale
+                            ) # ^ changed from 3.0 to 1.5 on 20180413
         ax.tick_params(axis='both', direction='out', top=False, right=False)
         for which in ['left', 'right', 'bottom', 'top']:
             ax.spines[which].set_visible(False)
@@ -682,10 +680,10 @@ def subplotpercentiles(ax, dfplot, datacolumn, tracecolumn, subplotcolumn=None,
         tracevals.sort()
     else:
         tracevals = traceorder
-        
+
     ### Get colors
     if colordict is None:
-        colors = ['C{}'.format(i%10) for i in range(len(tracevals))]
+        colors = [f'C{i % 10}' for i in range(len(tracevals))]
         colordict = dict(zip(tracevals, colors))
     elif type(colordict) == list:
         colordict = dict(zip(tracevals, colordict))
@@ -714,20 +712,20 @@ def subplotpercentiles(ax, dfplot, datacolumn, tracecolumn, subplotcolumn=None,
                 ].sort_values(ascending=ascending)
                 ax.fill_between(x, y, y2, label=traceval,
                         color=colordict[traceval], **kwargs)
-                
+
         ax.set_xlim(0,100)
         ax.xaxis.set_minor_locator(AutoMinorLocator(xdivs))
         ax.tick_params(axis='both', which='major', direction='in', 
                        top=True, right=True, length=4)
         ax.tick_params(axis='x', which='minor', direction='in', 
                        top=True, length=3, color='k')
-    
+
     [line.set_zorder(10) for line in ax.lines] # lines on top of axes
     ax.set_ylabel(datacolumn, fontsize='x-large', weight='bold')
 
     ### Set y limits based on ymin, ymax
     if ylimits is not None:
-        assert len(ylimits) == 2, 'len(ylimits) must be 2 but is {}'.format(len(ylimits))
+        assert len(ylimits) == 2, f'len(ylimits) must be 2 but is {len(ylimits)}'
         assert type(ylimits[0]) == type(ylimits[1])
         if type(ylimits[0]) == str:
             ymin = float(ylimits[0].replace('%','')) * 0.01
@@ -762,16 +760,16 @@ def plotpercentiles(dfplot, datacolumn, tracecolumn, subplotcolumn=None,
     else:
         ncols = len(subplotorder) + int(unsubplot)
         subplotvals = subplotorder
-        
+
     if figsize is None:
         figsize = (ncols*2, 3)
 
     ### Check for overload
     if ncols >= 50:
-        raise Exception('Whoooah too many columns: {}'.format(ncols))
+        raise Exception(f'Whoooah too many columns: {ncols}')
     ### Get colors
     if colordict is None:
-        colors = ['C{}'.format(i%10) for i in range(len(tracevals))]
+        colors = [f'C{i % 10}' for i in range(len(tracevals))]
         colordict = dict(zip(tracevals, colors))
     elif type(colordict) == list:
         colordict = dict(zip(tracevals, colordict))
@@ -800,7 +798,7 @@ def plotpercentiles(dfplot, datacolumn, tracecolumn, subplotcolumn=None,
                     axis='x', which='minor', direction='in', 
                     top=True, length=3, color='k')
                 [line.set_zorder(10) for line in ax[j].lines] # lines on top of axes
-            
+
             ### Plot the all-data subplot
             if unsubplot:
                 dfpanel = dfplot.loc[
@@ -819,7 +817,7 @@ def plotpercentiles(dfplot, datacolumn, tracecolumn, subplotcolumn=None,
                     axis='x', which='minor', direction='in', 
                     top=True, length=3, color='k')
                 [line.set_zorder(10) for line in ax[-1].lines] # lines on top of axes
-                
+
             ### Label the leftmost axis
             ax[0].set_ylabel(datacolumn, fontsize='x-large', weight='bold')
         else:
@@ -842,7 +840,7 @@ def plotpercentiles(dfplot, datacolumn, tracecolumn, subplotcolumn=None,
 
     ### Set y limits based on ymin, ymax
     if ylimits is not None:
-        assert len(ylimits) == 2, 'len(ylimits) must be 2 but is {}'.format(len(ylimits))
+        assert len(ylimits) == 2, f'len(ylimits) must be 2 but is {len(ylimits)}'
         assert type(ylimits[0]) == type(ylimits[1])
         if type(ylimits[0]) == str:
             ymin = float(ylimits[0].replace('%','')) * 0.01
@@ -867,8 +865,8 @@ def get_aea_bounds(dfplot, buffer=1.05, lat_1=29.5, lat_2=45.5):
     """
     import pyproj
     latlabel, lonlabel = pvvm.toolbox.get_latlonlabels(dfplot)
-    
-    
+
+
     bound = [
         dfplot[lonlabel].min(), dfplot[latlabel].min(),
         dfplot[lonlabel].max(), dfplot[latlabel].max()
@@ -877,33 +875,29 @@ def get_aea_bounds(dfplot, buffer=1.05, lat_1=29.5, lat_2=45.5):
               (bound[2],bound[3]), (bound[0],bound[3]),]
 
     ### Undo defaults if desired
-    if lat_1 is None:
-        lat1 = bound[1]
-    else:
-        lat1 = lat_1
-    if lat_2 is None:
-        lat2 = bound[3]
-    else:
-        lat2 = lat_2
+    lat1 = bound[1] if lat_1 is None else lat_1
+    lat2 = bound[3] if lat_2 is None else lat_2
     ### Get the other params from the center of the supplied points
     lat_0 = (bound[1]+bound[3])/2
     lon_0 = (bound[0]+bound[2])/2
 
     pa = pyproj.Proj(
-        "+proj=aea +lat_1={} +lat_2={} +lat_0={} +lon_0={}".format(
-            lat1, lat2, lat_0, lon_0))
+        f"+proj=aea +lat_1={lat1} +lat_2={lat2} +lat_0={lat_0} +lon_0={lon_0}"
+    )
     lon,lat = zip(*coords)
     x,y = pa(lon,lat)
     # cop = {'type':'Polygon','coordinates':[zip(x,y)]}
-    width = 2 * max([abs(i) for i in x]) * buffer
-    height = 2 * max([abs(i) for i in y]) * buffer
-    
-    bounds = {
-        'lat_1': lat1, 'lat_2': lat2,
-        'lon_0': lon_0, 'lat_0': lat_0,
-        'width': width, 'height': height,
+    width = 2 * max(abs(i) for i in x) * buffer
+    height = 2 * max(abs(i) for i in y) * buffer
+
+    return {
+        'lat_1': lat1,
+        'lat_2': lat2,
+        'lon_0': lon_0,
+        'lat_0': lat_0,
+        'width': width,
+        'height': height,
     }
-    return bounds
 
 
 def draw_screen_poly(poly, m, 
